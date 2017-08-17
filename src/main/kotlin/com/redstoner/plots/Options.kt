@@ -15,8 +15,14 @@ class Options {
 
     fun writeTo(writer: Writer) = Jackson.yamlObjectMapper.writeValue(writer, this)
 
+    fun mergeFrom(reader: Reader) = Jackson.yamlObjectMapper.readerForUpdating(this).readValue<Options>(reader)
+
+    override fun toString(): String = Jackson.yamlObjectMapper.writeValueAsString(this)
+
     companion object {
         fun loadFrom(reader: Reader): Options = Jackson.yamlObjectMapper.readValue(reader, Options::class.java)
     }
+
+
 
 }

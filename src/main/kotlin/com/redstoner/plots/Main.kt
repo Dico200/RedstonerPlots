@@ -1,8 +1,11 @@
 package com.redstoner.plots
 
+import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.io.Files
 import com.redstoner.plots.model.generator.DefaultPlotGenerator
 import com.redstoner.plots.model.generator.GeneratorFactories
+import io.dico.dicore.command.CommandBuilder
+import io.dico.dicore.command.EOverridePolicy
 import org.bukkit.plugin.java.JavaPlugin
 import java.io.File
 import java.io.IOException
@@ -14,6 +17,8 @@ class Main : JavaPlugin() {
         private set
 
     init {
+        _instance = this
+
         GeneratorFactories.registerFactory(DefaultPlotGenerator.Factory)
 
         val file = File(dataFolder, "options.yml")
@@ -33,15 +38,36 @@ class Main : JavaPlugin() {
         }
     }
 
-    override fun onEnable() {
+    companion object {
+        val instance: Main
+            get() = _instance ?: throw NullPointerException()
 
+        private var _instance: Main? = null
+    }
+
+    override fun onEnable() {
+        CommandBuilder()
+                .group("plot", "plots", "p")
+                .registerCommands(PlotCommands())
+                .parent()
+                .getDispatcher().registerToCommandMap("redstonerplots:", EOverridePolicy.OVERRIDE_ALL)
     }
 
     fun loadOptions() {
         try {
-            options = Options.loadFrom(Files.newReader(optionsFile, Charset.defaultCharset()))
+            options.mergeFrom(Files.newReader(optionsFile, Charset.defaultCharset()))
+            println("Config: $options")
+        } catch (ex: JsonProcessingException) {
+            logger.severe("there's a syntax error in the options file: ${ex.message}")
+            if (optionsFile.renameTo(File(dataFolder, "options-invalid.yml"))) {
+                if (options.worlds.isEmpty()) {
+                    options.addDefaultWorld()
+                }
+                saveOptions()
+                logger.info("The options file has been renamed to options-invalid.yml, and has been replaced with a properly formatted options file.")
+            }
         } catch (ex: IOException) {
-            logger.severe("error occurred while loading the config: $ex")
+            logger.severe("failed to load the options: $ex")
             ex.printStackTrace()
         }
     }
@@ -50,7 +76,7 @@ class Main : JavaPlugin() {
         try {
             options.writeTo(Files.newWriter(optionsFile, Charset.defaultCharset()))
         } catch (ex: IOException) {
-            logger.severe("error occurred while saving the options: $ex")
+            logger.severe("failed to save the options: $ex")
             ex.printStackTrace()
         }
     }
