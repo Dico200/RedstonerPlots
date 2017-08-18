@@ -16,13 +16,13 @@ class PlotWorld(val name: String,
         tmp
     }
 
+    val container = DefaultPlotContainer(this)
 
-
-    fun plotByID(x: Int, z: Int) {
-
+    fun plotByID(x: Int, z: Int): Plot? {
+        TODO("not implemented")
     }
 
-    fun plotByID(id: Vec2i) = plotByID(id.x, id.z)
+    fun plotByID(id: Vec2i): Plot? = plotByID(id.x, id.z)
 
 
 

@@ -15,5 +15,6 @@ data class WorldOptions(var gameMode: GameMode = GameMode.CREATIVE,
                         var blockPortalCreation: Boolean = true,
                         var blockMobSpawning: Boolean = true,
                         var blockedItems: Set<Material> = EnumSet.of(Material.AIR),
+                        var axisLimit: Int = 10,
                         var generator: GeneratorOptions = DefaultGeneratorOptions()) {
 }
