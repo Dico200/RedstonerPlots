@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.*
 import com.fasterxml.jackson.databind.ser.BeanSerializerModifier
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.redstoner.plots.*
+import com.redstoner.plots.model.*
 import com.redstoner.plots.model.generator.*
 import kotlin.reflect.KClass
 import kotlin.reflect.full.isSuperclassOf

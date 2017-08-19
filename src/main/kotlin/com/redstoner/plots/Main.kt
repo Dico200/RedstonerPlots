@@ -2,8 +2,7 @@ package com.redstoner.plots
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.io.Files
-import com.redstoner.plots.model.generator.DefaultPlotGenerator
-import com.redstoner.plots.model.generator.GeneratorFactories
+import com.redstoner.plots.DefaultPlotGenerator
 import io.dico.dicore.command.CommandBuilder
 import io.dico.dicore.command.EOverridePolicy
 import org.bukkit.plugin.java.JavaPlugin

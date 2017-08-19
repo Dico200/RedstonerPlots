@@ -1,5 +1,11 @@
-package com.redstoner.plots.model.generator
+package com.redstoner.plots
 
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.databind.DeserializationContext
+import com.fasterxml.jackson.databind.SerializerProvider
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer
+import com.fasterxml.jackson.databind.ser.std.StdSerializer
 import org.bukkit.Material
 import org.bukkit.block.Block
 
@@ -51,6 +57,23 @@ data class BlockType(val id: Short,
             }
         }
 
+    }
+
+}
+
+class BlockTypeDeserializer : StdDeserializer<BlockType>(BlockType::class.java) {
+
+    override fun deserialize(p: JsonParser?, ctxt: DeserializationContext?): BlockType {
+        return BlockType.fromString(p!!.valueAsString)
+    }
+
+}
+
+
+class BlockTypeSerializer : StdSerializer<BlockType>(BlockType::class.java) {
+
+    override fun serialize(value: BlockType?, gen: JsonGenerator?, provider: SerializerProvider?) {
+        gen?.writeString(value?.toString())
     }
 
 }

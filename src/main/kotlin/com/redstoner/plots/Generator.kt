@@ -1,20 +1,106 @@
-package com.redstoner.plots.model.generator
+package com.redstoner.plots
 
-import com.redstoner.plots.math.NumberExtensions.clamp
-import com.redstoner.plots.math.NumberExtensions.umod
-import com.redstoner.plots.math.Vec2i
-import com.redstoner.plots.model.Plot
-import com.redstoner.plots.model.PlotWorld
+import com.redstoner.plots.math.*
 import org.bukkit.*
 import org.bukkit.block.*
 import org.bukkit.entity.Entity
+import org.bukkit.generator.BlockPopulator
+import org.bukkit.generator.ChunkGenerator
 import java.util.*
 import kotlin.coroutines.experimental.buildIterator
+import kotlin.reflect.KClass
+
+abstract class PlotGenerator(val world: PlotWorld) : ChunkGenerator() {
+
+    abstract val factory: GeneratorFactory
+
+    abstract override fun generateChunkData(world: World?, random: Random?, chunkX: Int, chunkZ: Int, biome: BiomeGrid?): ChunkData
+
+    abstract fun populate(world: World?, random: Random?, chunk: Chunk?)
+
+    abstract override fun getFixedSpawnLocation(world: World?, random: Random?): Location
+
+    override fun getDefaultPopulators(world: World?): MutableList<BlockPopulator> {
+        return Collections.singletonList(object : BlockPopulator() {
+            override fun populate(world: World?, random: Random?, chunk: Chunk?) {
+                this@PlotGenerator.populate(world, random, chunk)
+            }
+        })
+    }
+
+    abstract fun plotAt(x: Int, z: Int): Plot?
+
+    fun plotAt(vec: Vec2i): Plot? = plotAt(vec.x, vec.z)
+
+    fun plotAt(loc: Location): Plot? = plotAt(loc.x.floor(), loc.z.floor())
+
+    fun plotAt(block: Block): Plot? = plotAt(block.x, block.z)
+
+    abstract fun updateOwner(plot: Plot)
+
+    abstract fun getBottomCoord(plot: Plot): Vec2i
+
+    abstract fun getHomeLocation(plot: Plot): Location
+
+    abstract fun setBiome(plot: Plot, biome: Biome)
+
+    abstract fun getEntities(plot: Plot): Collection<Entity>
+
+    abstract fun getBlocks(plot: Plot, yRange: IntRange = 0..255): Iterator<Block>
+
+}
+
+
+interface GeneratorFactory {
+
+    val name: String
+
+    val optionsClass: KClass<out GeneratorOptions>
+
+    fun newPlotGenerator(world: PlotWorld): PlotGenerator
+
+}
+
+object GeneratorFactories {
+    private val map: MutableMap<String, GeneratorFactory> = HashMap()
+
+    fun registerFactory(generator: GeneratorFactory): Boolean = map.putIfAbsent(generator.name, generator) == null
+
+    fun getFactory(name: String): GeneratorFactory? = map.get(name)
+
+}
+
+data class DefaultGeneratorOptions(val defaultBiome: Biome = Biome.JUNGLE,
+                                   val wallType: BlockType = BlockType(Material.STEP),
+                                   val floorType: BlockType = BlockType(Material.QUARTZ_BLOCK),
+                                   val fillType: BlockType = BlockType(Material.QUARTZ_BLOCK),
+                                   val pathMainType: BlockType = BlockType(Material.SANDSTONE),
+                                   val pathAltType: BlockType = BlockType(Material.REDSTONE_BLOCK),
+                                   val plotSize: Int = 101,
+                                   val pathSize: Int = 9,
+                                   val floorHeight: Int = 64,
+                                   val offsetX: Int = 0,
+                                   val offsetZ: Int = 0) : GeneratorOptions() {
+
+    @Transient
+    val sectionSize = plotSize + pathSize
+    @Transient
+    val pathOffset = (if (pathSize % 2 == 0) pathSize + 2 else pathSize + 1) / 2
+
+    @Transient
+    val makePathMain = pathSize > 2
+    @Transient
+    val makePathAlt = pathSize > 4
+
+    override fun generatorFactory(): GeneratorFactory = DefaultPlotGenerator
+
+}
+
 
 class DefaultPlotGenerator(world: PlotWorld) : PlotGenerator(world) {
     private val o = world.options.generator as DefaultGeneratorOptions
 
-    override fun factory(): GeneratorFactory = Factory
+    override val factory = Factory
 
     companion object Factory : GeneratorFactory {
         override val name get() = "default"
@@ -78,6 +164,11 @@ class DefaultPlotGenerator(world: PlotWorld) : PlotGenerator(world) {
         generate(chunk!!.x, chunk.z, o.floorType.data, o.wallType.data, o.pathMainType.data, o.pathAltType.data, o.fillType.data) { x, y, z, type ->
             if (type == 0.toByte()) chunk.getBlock(x, y, z).setData(type, false)
         }
+    }
+
+    override fun getFixedSpawnLocation(world: World?, random: Random?): Location {
+        val fix = if (o.plotSize.even) 0.5 else 0.0
+        return Location(world, o.offsetX + fix, o.floorHeight + 1.0, o.offsetZ + fix)
     }
 
     override fun plotAt(x: Int, z: Int): Plot? {

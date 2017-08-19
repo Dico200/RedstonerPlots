@@ -1,10 +1,10 @@
 package com.redstoner.plots.storage.backing
 
-import com.redstoner.plots.model.Plot
-import com.redstoner.plots.model.PlotData
-import com.redstoner.plots.model.PlotOptions
-import com.redstoner.plots.model.PlotOwner
-import com.redstoner.plots.storage.PlotID
+import com.redstoner.plots.Plot
+import com.redstoner.plots.PlotData
+import com.redstoner.plots.PlotOptions
+import com.redstoner.plots.PlotOwner
+import com.redstoner.plots.storage.SerializablePlot
 import kotlinx.coroutines.experimental.channels.ProducerScope
 import java.util.*
 
@@ -19,7 +19,7 @@ class MySqlBacking : Backing {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-    suspend override fun getOwnedPlots(user: PlotOwner): Sequence<PlotID> {
+    suspend override fun getOwnedPlots(user: PlotOwner): Sequence<SerializablePlot> {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 

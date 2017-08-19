@@ -1,10 +1,10 @@
 package com.redstoner.plots.storage.backing
 
-import com.redstoner.plots.model.Plot
-import com.redstoner.plots.model.PlotData
-import com.redstoner.plots.model.PlotOptions
-import com.redstoner.plots.model.PlotOwner
-import com.redstoner.plots.storage.PlotID
+import com.redstoner.plots.Plot
+import com.redstoner.plots.PlotData
+import com.redstoner.plots.PlotOptions
+import com.redstoner.plots.PlotOwner
+import com.redstoner.plots.storage.SerializablePlot
 import kotlinx.coroutines.experimental.channels.ProducerScope
 import java.util.*
 
@@ -21,7 +21,7 @@ interface Backing {
 
     suspend fun readPlotData(plotFor: Plot): PlotData
 
-    suspend fun getOwnedPlots(user: PlotOwner): Sequence<PlotID>
+    suspend fun getOwnedPlots(user: PlotOwner): Sequence<SerializablePlot>
 
 
     suspend fun setPlotData(plotFor: Plot, data: PlotData)

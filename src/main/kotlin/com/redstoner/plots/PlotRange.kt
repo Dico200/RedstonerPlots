@@ -1,8 +1,6 @@
-package com.redstoner.plots.storage
+package com.redstoner.plots
 
 import com.redstoner.plots.math.Vec2i
-import com.redstoner.plots.model.Plot
-import com.redstoner.plots.model.PlotWorld
 import kotlin.coroutines.experimental.buildIterator
 
 abstract class PlotRange : Sequence<Plot> {
