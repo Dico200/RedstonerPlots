@@ -6,6 +6,8 @@ class Plot(val world: PlotWorld,
            val coord: Vec2i,
            data: PlotData? = null) {
 
+    val id get() = "${coord.x}:${coord.z}"
+
     var data: PlotData? = data
         get() {
             if (field === null) {

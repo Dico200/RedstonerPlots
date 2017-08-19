@@ -1,15 +1,34 @@
 package com.redstoner.plots.model.generator
 
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
-import com.redstoner.plots.util.Jackson
 import org.bukkit.Material
+import org.bukkit.block.Block
 
 data class BlockType(val id: Short,
                      val data: Byte = 0) {
 
+    init {
+        Material.getMaterial(intId) ?: throw IllegalArgumentException()
+    }
+
+    val intId get() = id.toInt()
+
+    val material get() = Material.getMaterial(intId) ?: throw InternalError()
+
     constructor(type: Material, data: Byte = 0) : this(type.id.toShort(), data)
 
+    fun setBlock(block: Block, applyPhysics: Boolean = false): Boolean = block.setTypeIdAndData(intId, data, applyPhysics)
+
+    fun toInt(): Int = intId.shl(16).or(data.toInt())
+
+    override fun toString(): String {
+        if (data == 0.toByte()) {
+            return id.toString()
+        }
+        return id.toString() + data.toString()
+    }
+
     companion object {
+        val AIR = BlockType(Material.AIR)
 
         @Throws(IllegalArgumentException::class)
         fun fromString(str: String): BlockType {
@@ -32,21 +51,6 @@ data class BlockType(val id: Short,
             }
         }
 
-        init {
-            Jackson.yamlObjectMapper.registerKotlinModule()
-        }
-
-    }
-
-    fun toInt(): Int {
-        return id.toInt().shl(16).or(data.toInt())
-    }
-
-    override fun toString(): String {
-        if (data == 0.toByte()) {
-            return id.toString()
-        }
-        return id.toString() + data.toString()
     }
 
 }

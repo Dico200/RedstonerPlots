@@ -20,6 +20,11 @@ data class DefaultGeneratorOptions(val defaultBiome: Biome = Biome.JUNGLE,
     @Transient
     val pathOffset = (if (pathSize % 2 == 0) pathSize + 2 else pathSize + 1) / 2
 
+    @Transient
+    val makePathMain = pathSize > 2
+    @Transient
+    val makePathAlt = pathSize > 4
+
     override fun generatorFactory(): GeneratorFactory = DefaultPlotGenerator
 
 }

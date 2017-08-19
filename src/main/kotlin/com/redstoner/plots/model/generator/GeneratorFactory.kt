@@ -9,6 +9,6 @@ interface GeneratorFactory {
 
     val optionsClass: KClass<out GeneratorOptions>
 
-    fun newPlotGenerator(world: PlotWorld, options: GeneratorOptions): PlotGenerator
+    fun newPlotGenerator(world: PlotWorld): PlotGenerator
 
 }

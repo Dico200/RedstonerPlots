@@ -10,6 +10,6 @@ data class Vec3d(val x: Double, val y: Double, val z: Double) {
 
     }
 
-    fun toVec3i() = Vec3i(NumberConversions.floor(x), NumberConversions.floor(y), NumberConversions.floor(z))
+    fun toVec3i() = Vec3i(NumberExtensions.floor(x), NumberExtensions.floor(y), NumberExtensions.floor(z))
 
 }
