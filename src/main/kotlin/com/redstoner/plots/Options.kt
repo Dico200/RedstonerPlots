@@ -4,8 +4,11 @@ import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.*
 import com.redstoner.plots.util.Jackson
+import com.redstoner.plots.util.substringFrom
+import com.redstoner.plots.util.toIntOr
 import org.bukkit.GameMode
 import org.bukkit.Material
+import org.bukkit.block.Biome
 import java.io.Reader
 import java.io.Writer
 import java.util.*
@@ -49,6 +52,32 @@ abstract class GeneratorOptions {
 
 }
 
+data class DefaultGeneratorOptions(val defaultBiome: Biome = Biome.JUNGLE,
+                                   val wallType: BlockType = BlockType(Material.STEP),
+                                   val floorType: BlockType = BlockType(Material.QUARTZ_BLOCK),
+                                   val fillType: BlockType = BlockType(Material.QUARTZ_BLOCK),
+                                   val pathMainType: BlockType = BlockType(Material.SANDSTONE),
+                                   val pathAltType: BlockType = BlockType(Material.REDSTONE_BLOCK),
+                                   val plotSize: Int = 101,
+                                   val pathSize: Int = 9,
+                                   val floorHeight: Int = 64,
+                                   val offsetX: Int = 0,
+                                   val offsetZ: Int = 0) : GeneratorOptions() {
+
+    @Transient
+    val sectionSize = plotSize + pathSize
+    @Transient
+    val pathOffset = (if (pathSize % 2 == 0) pathSize + 2 else pathSize + 1) / 2
+
+    @Transient
+    val makePathMain = pathSize > 2
+    @Transient
+    val makePathAlt = pathSize > 4
+
+    override fun generatorFactory(): GeneratorFactory = DefaultPlotGenerator
+
+}
+
 
 class GeneratorOptionsDeserializer : JsonDeserializer<GeneratorOptions>() {
 
@@ -56,7 +85,7 @@ class GeneratorOptionsDeserializer : JsonDeserializer<GeneratorOptions>() {
         val node = parser!!.readValueAsTree<JsonNode>()
         val name = node.get("name").asText()
         val optionsNode = node.get("options")
-        val factory = GeneratorFactories.getFactory(name) ?: throw IllegalStateException("Unknown generator: $name")
+        val factory = GeneratorFactory.getFactory(name) ?: throw IllegalStateException("Unknown generator: $name")
 
         return parser.codec.treeToValue(optionsNode, factory.optionsClass.java)
     }
@@ -78,9 +107,28 @@ class GeneratorOptionsSerializer(private val defaultSerializer: JsonSerializer<G
 
 }
 
-data class DataStorageOptions(var address: String,
-                              var database: String,
-                              var username: String,
-                              var password: String,
-                              var poolSize: Int) {
+data class DataStorageOptions(val address: String,
+                              val database: String,
+                              val username: String,
+                              val password: String,
+                              val poolSize: Int) {
+
+    fun splitAddressAndPort(defaultPort: Int = 3306): Pair<String, Int>? {
+        val idx = address.indexOf(":")
+        if (idx == -1) {
+            return Pair(address, 3306)
+        }
+        val addressName = address.substring(0, idx)
+        if (addressName.isBlank()) {
+            Main.instance.logger.severe("(Invalidly) blank address in data storage options")
+            return null
+        }
+
+        val port = address.substringFrom(idx).toIntOr {
+            Main.instance.logger.severe("Invalid port number in data storage options: $it, using 3306 as default")
+            return null
+        }
+        return Pair(addressName, port)
+    }
+
 }

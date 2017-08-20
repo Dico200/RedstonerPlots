@@ -50,8 +50,20 @@ abstract class PlotGenerator(val world: PlotWorld) : ChunkGenerator() {
 
 }
 
-
 interface GeneratorFactory {
+
+    companion object GeneratorFactories {
+        private val map: MutableMap<String, GeneratorFactory> = HashMap()
+
+        fun registerFactory(generator: GeneratorFactory): Boolean = map.putIfAbsent(generator.name, generator) == null
+
+        fun getFactory(name: String): GeneratorFactory? = map.get(name)
+
+        init {
+            registerFactory(DefaultPlotGenerator.Factory)
+        }
+
+    }
 
     val name: String
 
@@ -60,42 +72,6 @@ interface GeneratorFactory {
     fun newPlotGenerator(world: PlotWorld): PlotGenerator
 
 }
-
-object GeneratorFactories {
-    private val map: MutableMap<String, GeneratorFactory> = HashMap()
-
-    fun registerFactory(generator: GeneratorFactory): Boolean = map.putIfAbsent(generator.name, generator) == null
-
-    fun getFactory(name: String): GeneratorFactory? = map.get(name)
-
-}
-
-data class DefaultGeneratorOptions(val defaultBiome: Biome = Biome.JUNGLE,
-                                   val wallType: BlockType = BlockType(Material.STEP),
-                                   val floorType: BlockType = BlockType(Material.QUARTZ_BLOCK),
-                                   val fillType: BlockType = BlockType(Material.QUARTZ_BLOCK),
-                                   val pathMainType: BlockType = BlockType(Material.SANDSTONE),
-                                   val pathAltType: BlockType = BlockType(Material.REDSTONE_BLOCK),
-                                   val plotSize: Int = 101,
-                                   val pathSize: Int = 9,
-                                   val floorHeight: Int = 64,
-                                   val offsetX: Int = 0,
-                                   val offsetZ: Int = 0) : GeneratorOptions() {
-
-    @Transient
-    val sectionSize = plotSize + pathSize
-    @Transient
-    val pathOffset = (if (pathSize % 2 == 0) pathSize + 2 else pathSize + 1) / 2
-
-    @Transient
-    val makePathMain = pathSize > 2
-    @Transient
-    val makePathAlt = pathSize > 4
-
-    override fun generatorFactory(): GeneratorFactory = DefaultPlotGenerator
-
-}
-
 
 class DefaultPlotGenerator(world: PlotWorld) : PlotGenerator(world) {
     private val o = world.options.generator as DefaultGeneratorOptions

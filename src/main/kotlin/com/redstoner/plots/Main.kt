@@ -2,7 +2,6 @@ package com.redstoner.plots
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.io.Files
-import com.redstoner.plots.DefaultPlotGenerator
 import io.dico.dicore.command.CommandBuilder
 import io.dico.dicore.command.EOverridePolicy
 import org.bukkit.plugin.java.JavaPlugin
@@ -17,8 +16,6 @@ class Main : JavaPlugin() {
 
     init {
         _instance = this
-
-        GeneratorFactories.registerFactory(DefaultPlotGenerator.Factory)
 
         val file = File(dataFolder, "options.yml")
         optionsFile = file

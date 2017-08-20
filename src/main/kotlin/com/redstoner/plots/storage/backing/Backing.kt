@@ -12,6 +12,9 @@ interface Backing {
 
     val name: String
 
+    fun init()
+
+    fun close()
 
     /**
      * This producer function is capable of constantly reading plots from a potentially infinite sequence,
