@@ -12,19 +12,19 @@ interface Backing {
 
     val name: String
 
-    fun init()
+    suspend fun init()
 
-    fun close()
+    suspend fun shutdown()
 
     /**
      * This producer function is capable of constantly reading plots from a potentially infinite sequence,
      * and provide plotdata for it as read from the database.
      */
-    val plotDataProducer: suspend ProducerScope<Pair<Plot, PlotData>>.(Sequence<Plot>) -> Unit
+    val producePlotData: suspend ProducerScope<Pair<Plot, PlotData?>>.(Sequence<Plot>) -> Unit
 
-    suspend fun readPlotData(plotFor: Plot): PlotData
+    suspend fun readPlotData(plotFor: Plot): PlotData?
 
-    suspend fun getOwnedPlots(user: PlotOwner): Sequence<SerializablePlot>
+    suspend fun getOwnedPlots(user: PlotOwner): List<SerializablePlot>
 
 
     suspend fun setPlotData(plotFor: Plot, data: PlotData)

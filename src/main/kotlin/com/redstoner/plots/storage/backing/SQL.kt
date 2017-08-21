@@ -1,67 +1,143 @@
 package com.redstoner.plots.storage.backing
 
 import com.redstoner.plots.*
+import com.redstoner.plots.math.Vec2i
 import com.redstoner.plots.storage.SerializablePlot
-import com.redstoner.plots.util.loop
+import com.redstoner.plots.storage.SerializableWorld
+import com.redstoner.plots.util.toByteArray
+import com.redstoner.plots.util.toUUID
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.coroutines.experimental.channels.ProducerScope
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.io.InputStream
 import java.sql.Connection
+import java.sql.Statement
 import java.util.*
 
+class SqlBacking(val driver: SqlDriver) : Backing {
+    private companion object {
+        @JvmStatic
+        val plotQuery = "select plot_id, owner_name, owner_uuid, opt_outsider_i_inventory, " +
+                "opt_outsider_i_inputs from plots where world_id = ? and idx = ? and idz = ?;"
 
-class MySqlBacking(val driver: SQLDriver) : Backing {
+        @JvmStatic
+        val localAddedQuery = "SELECT uuid, flag FROM added_local WHERE plot_id = ?;"
+    }
+
     override val name get() = driver.name
-    private inline val String.prefixed get() = this.replace("{prefix}", "RedstonerPlots-")
 
-    override fun init() {
+    private fun printErr(err: String) = Main.instance.logger.severe("[Storage error $name] $err")
+
+    private inline fun <R> conn(block: Connection.() -> R): R? {
+        try {
+            return driver.connection.use(block)
+        } catch (ex: Exception) {
+            ex.printStackTrace()
+            printErr("Failed to connect to database")
+            return null
+        }
+    }
+
+    private inline fun <R> connCatch(msg: () -> String, block: Connection.() -> R): R? = conn {
+        try {
+            block(this)
+        } catch (ex: Exception) {
+            ex.printStackTrace()
+            printErr(msg())
+            null
+        }
+    }
+
+    override suspend fun init() {
         try {
             driver.init()
 
-            if (!tableExists("{prefix}plots".prefixed)) {
+            if (!tableExists("plots")) {
                 val schemaFile = "schema/${name.toLowerCase()}.sql"
-                (Main.instance.getResource(schemaFile) ?: throw Error("Didn't find schema file for $name")).use {
-                    BufferedReader(InputStreamReader(this, Charsets.UTF_8)).use buf@ {
-                        driver.connection.use {
-                            createStatement().use {
-                                val builder = StringBuilder()
-                                var line: String?
-                                loop {
-                                    line = this@buf.readLine()
-                                    if (line == null) doBreak()
-                                    if (line!!.startsWith("--") || line!!.startsWith(("#"))) doContinue()
-                                    builder.append(line)
-                                    if (line!!.endsWith(";")) {
-                                        builder.deleteCharAt(builder.length - 1)
-                                        val statement = builder.toString().trim().prefixed
-                                        if (!statement.isBlank()) {
-                                            addBatch(statement)
-                                        }
-                                    }
-                                }
-                                executeBatch()
-                            }
-                        }
-                    }
+                val stream = (Main.instance.getResource(schemaFile) ?: throw Exception("Didn't find schema file for $name"))
+                driver.connection.use {
+                    createStatement().use { executeBatch(stream, this) }
                 }
             }
         } catch (ex: Exception) {
             ex.printStackTrace()
-            Main.instance.logger.severe("Failed to initialise the database")
-            close()
+            printErr("Failed to initialise the database")
+            shutdown()
         }
     }
 
-    override fun close() {
+    private fun getWorldId(conn: Connection, uid: UUID, name: String): Int {
+        return conn.prepareStatement("SELECT world_id FROM worlds WHERE uid = unhex(?);").use {
+            val uidBytes = uid.toByteArray()
+            setBytes(1, uidBytes)
+            executeQuery().use {
+                if (next()) {
+                    getInt(1)
+                } else {
+                    conn.prepareStatement("INSERT IGNORE worlds VALUES (?, ?);", Statement.RETURN_GENERATED_KEYS).use {
+                        setString(1, name)
+                        setBytes(2, uidBytes)
+                        executeUpdate()
+                        generatedKeys.use {
+                            next()
+                            getInt(1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun getPlotId(conn: Connection, worldUID: UUID, worldName: String, idx: Int, idz: Int): Int {
+        return conn.prepareStatement("SELECT plot_id FROM plots WHERE world_id = ? and idx = ? and idz = ?;").use {
+            val worldId = getWorldId(conn, worldUID, worldName)
+            setInt(1, worldId)
+            setInt(2, idx)
+            setInt(3, idz)
+            executeQuery().use {
+                if (next()) {
+                    getInt(1)
+                } else {
+                    conn.prepareStatement("INSERT IGNORE plots VALUES (?, ?, ?);", Statement.RETURN_GENERATED_KEYS).use {
+                        setInt(1, worldId)
+                        setInt(2, idx)
+                        setInt(3, idz)
+                        executeUpdate()
+                        generatedKeys.use {
+                            next()
+                            getInt(1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun executeBatch(stream: InputStream, statement: Statement) {
+        val lines = stream.bufferedReader().use { readLines() }
+        var sb = StringBuilder()
+        lines.filter { !it.startsWith("#") }.forEach {
+            sb.append(it)
+            if (it.endsWith(";")) {
+                sb.deleteCharAt(sb.length - 1)
+                val stString = sb.toString().trim()
+                statement.addBatch(stString)
+                sb = StringBuilder()
+            }
+        }
+        statement.executeBatch()
+    }
+
+    override suspend fun shutdown() {
         try {
             driver.shutdown()
         } catch (ex: Exception) {
-
+            ex.printStackTrace()
+            printErr("Failed to shutdown the database")
         }
     }
 
+    @Throws(Exception::class)
     private fun tableExists(tableName: String): Boolean {
         driver.connection.use {
             metaData.getTables(null, null, "%", null).use {
@@ -75,19 +151,127 @@ class MySqlBacking(val driver: SQLDriver) : Backing {
         }
     }
 
-    override val plotDataProducer: suspend ProducerScope<Pair<Plot, PlotData>>.(Sequence<Plot>) -> Unit
-        get() = TODO("not implemented") //To change initializer of created properties use File | Settings | File Templates.
+    private fun readPlotData(conn: Connection, plotFor: Plot): PlotData? {
+        try {
+            conn.prepareStatement(plotQuery).use {
+                val world = plotFor.world.world
+                setInt(1, getWorldId(conn, world.uid, world.name))
+                setInt(2, plotFor.coord.x)
+                setInt(3, plotFor.coord.z)
+                executeQuery().use {
+                    if (!next()) {
+                        return null
+                    }
 
-    suspend override fun readPlotData(plotFor: Plot): PlotData {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+                    val plotId = getLong(1)
+                    val ownerName = getString(2)
+                    val ownerUUID = getBytes(3).toUUID()
+                    val optInteractInputs = getBoolean(4)
+                    val optInteractInventory = getBoolean(5)
+                    val data = PlotData(
+                            owner = PlotOwner(ownerUUID, ownerName),
+                            options = PlotOptions(
+                                    allowsInteractInventory = optInteractInventory,
+                                    allowsInteractInputs = optInteractInputs)
+                    )
+
+                    conn.prepareStatement(localAddedQuery).use {
+                        setLong(1, plotId)
+                        executeQuery().use {
+                            while (next()) {
+                                val uuid = getBytes(1).toUUID() ?: continue
+                                val flag = getBoolean(2)
+                                data.added[uuid] = flag
+                            }
+                        }
+                    }
+
+                    return data
+                }
+            }
+        } catch (ex: Exception) {
+            ex.printStackTrace()
+            printErr("Failed to read plot data for plot $plotFor")
+            return null
+        }
     }
 
-    suspend override fun getOwnedPlots(user: PlotOwner): Sequence<SerializablePlot> {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    override val producePlotData: suspend ProducerScope<Pair<Plot, PlotData?>>.(Sequence<Plot>) -> Unit
+        get() = { conn { it.forEach { send(Pair(it, readPlotData(this, it))) } } }
+
+    suspend override fun readPlotData(plotFor: Plot): PlotData? = conn { readPlotData(this, plotFor) }
+
+    suspend override fun getOwnedPlots(user: PlotOwner): List<SerializablePlot> {
+        // so much indentation? Idk
+        val uuid = user.uuid ?: return emptyList()
+        return connCatch({ "Failed to get all plots owned by player with uuid ${user.uuid}" }) {
+            val list = ArrayList<SerializablePlot>()
+            prepareStatement("SELECT world_id, idx, idz FROM plots WHERE owner_uuid = ?;").use {
+                setBytes(1, uuid.toByteArray())
+                executeQuery().use rs1@ {
+                    while (next()) {
+                        val worldId = getInt(1)
+                        prepareStatement("SELECT name, uid FROM worlds WHERE world_id = ?;").use {
+                            setInt(1, worldId)
+                            executeQuery().use {
+                                if (next()) {
+                                    val plot = SerializablePlot(
+                                            coord = Vec2i(this@rs1.getInt(2), this@rs1.getInt(3)),
+                                            world = SerializableWorld(
+                                                    name = getString(1),
+                                                    uid = getBytes(2).toUUID()))
+                                    list.add(plot)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            list
+        } ?: emptyList()
     }
 
     suspend override fun setPlotData(plotFor: Plot, data: PlotData) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        connCatch({ "Failed to set plot data for $plotFor" }) {
+            val world = plotFor.world.world
+            val plotId = getPlotId(this, world.uid, world.name, plotFor.coord.x, plotFor.coord.z)
+            val reset = data.equalsDefaultData()
+
+            if (reset) {
+                prepareStatement("DELETE FROM plots WHERE plot_id = ?;").use {
+                    setInt(1, plotId)
+                    executeUpdate()
+                }
+            } else {
+                prepareStatement("UPDATE plots SET owner_uuid = ?, owner_name = ?, opt_outsider_i_inventory = ?, opt_outsider_i_inputs = ?" +
+                        " WHERE plot_id = ?;").use {
+                    setBytes(1, data.owner?.uuid.toByteArray())
+                    setString(2, data.owner?.name)
+                    setBoolean(3, data.options.allowsInteractInventory)
+                    setBoolean(4, data.options.allowsInteractInputs)
+                    setInt(5, plotId)
+                    executeUpdate()
+                }
+            }
+
+            prepareStatement("DELETE FROM added_local WHERE plot_id = ?;").use {
+                setInt(1, plotId)
+                executeUpdate()
+            }
+
+            if (!reset) {
+                prepareStatement("INSERT INTO added_local VALUES (?, ?, ?);").use {
+                    data.added.map.forEach { uuid, flag ->
+                        setInt(1, plotId)
+                        setBytes(2, uuid.toByteArray())
+                        setBoolean(3, flag)
+                        addBatch()
+                    }
+                    executeBatch()
+                }
+            }
+
+        }
     }
 
     suspend override fun setPlotOwner(plotFor: Plot, owner: PlotOwner) {
@@ -103,7 +287,7 @@ class MySqlBacking(val driver: SQLDriver) : Backing {
     }
 }
 
-abstract class SQLDriver {
+abstract class SqlDriver {
 
     abstract val name: String
 
@@ -115,7 +299,7 @@ abstract class SQLDriver {
 
 }
 
-class MySqlDriver(override val name: String, val o: DataStorageOptions, val driverClass: String) : SQLDriver() {
+class MySqlDriver(override val name: String, val o: DataConnectionOptions, val driverClass: String) : SqlDriver() {
     private var source: HikariDataSource? = null
 
     override fun init() {

@@ -1,10 +1,9 @@
 package com.redstoner.plots.storage
 
-import com.redstoner.plots.Plot
-import com.redstoner.plots.PlotData
-import com.redstoner.plots.PlotOptions
-import com.redstoner.plots.PlotOwner
+import com.redstoner.plots.*
 import com.redstoner.plots.storage.backing.Backing
+import com.redstoner.plots.storage.backing.MySqlDriver
+import com.redstoner.plots.storage.backing.SqlBacking
 import kotlinx.coroutines.experimental.CoroutineDispatcher
 import kotlinx.coroutines.experimental.CoroutineScope
 import kotlinx.coroutines.experimental.CoroutineStart
@@ -15,6 +14,7 @@ import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+import kotlin.reflect.KClass
 
 interface Storage {
 
@@ -24,11 +24,15 @@ interface Storage {
 
     val asyncDispatcher: CoroutineDispatcher
 
-    fun readPlotData(plotFor: Plot): CompletableFuture<PlotData>
+    fun init(): CompletableFuture<Unit>
 
-    fun readPlotData(plotsFor: Sequence<Plot>, channelCapacity: Int): ProducerJob<Pair<Plot, PlotData>>
+    fun shutdown(): CompletableFuture<Unit>
 
-    fun getOwnedPlots(user: PlotOwner): CompletableFuture<Sequence<SerializablePlot>>
+    fun readPlotData(plotFor: Plot): CompletableFuture<PlotData?>
+
+    fun readPlotData(plotsFor: Sequence<Plot>, channelCapacity: Int): ProducerJob<Pair<Plot, PlotData?>>
+
+    fun getOwnedPlots(user: PlotOwner): CompletableFuture<List<SerializablePlot>>
 
 
     fun setPlotData(plotFor: Plot, data: PlotData): CompletableFuture<Unit>
@@ -48,10 +52,14 @@ class AbstractStorage internal constructor(val backing: Backing) : Storage {
 
     private fun <T> future(block: suspend CoroutineScope.() -> T) = kotlinx.coroutines.experimental.future.future(asyncDispatcher, CoroutineStart.ATOMIC, block)
 
+    override fun init(): CompletableFuture<Unit> = future { backing.init() }
+
+    override fun shutdown(): CompletableFuture<Unit> = future { backing.shutdown() }
+
     override fun readPlotData(plotFor: Plot) = future { backing.readPlotData(plotFor) }
 
     override fun readPlotData(plotsFor: Sequence<Plot>, channelCapacity: Int) =
-            produce<Pair<Plot, PlotData>>(asyncDispatcher, capacity = channelCapacity) { backing.plotDataProducer(this, plotsFor) }
+            produce<Pair<Plot, PlotData?>>(asyncDispatcher, capacity = channelCapacity) { backing.producePlotData(this, plotsFor) }
 
     override fun getOwnedPlots(user: PlotOwner) = future { backing.getOwnedPlots(user) }
 
@@ -62,5 +70,43 @@ class AbstractStorage internal constructor(val backing: Backing) : Storage {
     override fun setPlotOptions(plotFor: Plot, options: PlotOptions) = future { backing.setPlotOptions(plotFor, options) }
 
     override fun setPlotPlayerState(plotFor: Plot, player: UUID, state: Boolean?) = future { backing.setPlotPlayerState(plotFor, player, state) }
+
+}
+
+interface StorageFactory {
+    companion object StorageFactories {
+        private val map: MutableMap<String, StorageFactory> = HashMap()
+
+        fun registerFactory(method: String, generator: StorageFactory): Boolean = map.putIfAbsent(method.toLowerCase(), generator) == null
+
+        fun getFactory(method: String): StorageFactory? = map.get(method.toLowerCase())
+
+        init {
+            ConnectionStorageFactory().register()
+        }
+    }
+
+    val optionsClass: KClass<out Any>
+
+    fun newStorageInstance(method: String, options: Any): Storage
+
+}
+
+class ConnectionStorageFactory : StorageFactory {
+    override val optionsClass = DataConnectionOptions::class
+
+    private val types: Map<String, String> = with(HashMap<String, String>()) {
+        put("mysql", "com.mysql.jdbc.jdbc2.optional.MysqlDataSource")
+        this
+    }
+
+    fun register() {
+        types.keys.forEach { StorageFactory.registerFactory(it, this) }
+    }
+
+    override fun newStorageInstance(method: String, options: Any): Storage {
+        val driverClass = types.get(method.toLowerCase()) ?: throw IllegalArgumentException("Storage method $method is not supported")
+        return AbstractStorage(SqlBacking(MySqlDriver(method.toLowerCase(), options as DataConnectionOptions, driverClass = driverClass)))
+    }
 
 }

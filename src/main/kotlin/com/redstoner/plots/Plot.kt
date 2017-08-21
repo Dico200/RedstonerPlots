@@ -9,21 +9,8 @@ import java.util.*
 
 class Plot(val world: PlotWorld,
            val coord: Vec2i,
-           data: PlotData? = null) {
-
+           var data: PlotData? = null) {
     val id get() = "${coord.x}:${coord.z}"
-
-    var data: PlotData? = data
-        get() {
-            if (field === null) {
-
-            }
-
-            return field
-        }
-        set(data) {
-            field = data
-        }
 
     val isLoaded: Boolean get() = data !== null
 
@@ -31,6 +18,7 @@ class Plot(val world: PlotWorld,
 
     override fun hashCode(): Int = world.hashCode() + 31 * coord.hashCode()
 
+    override fun toString(): String = "Plot(world=$world, coord=$coord)"
 }
 
 
@@ -45,11 +33,11 @@ class PlotAdded {
 
     operator fun get(uuid: UUID): Boolean? = _map.get(uuid)
 
-    fun ban(uuid: UUID) = setState(uuid, false)
+    fun ban(uuid: UUID) = set(uuid, false)
 
-    fun allow(uuid: UUID) = setState(uuid, true)
+    fun allow(uuid: UUID) = set(uuid, true)
 
-    fun setState(uuid: UUID, state: Boolean?) {
+    operator fun set(uuid: UUID, state: Boolean?) {
         synchronized(this) {
             if (state == null) {
                 _map.remove(uuid)
@@ -116,10 +104,6 @@ data class PlotOwner(var uuid: UUID? = null,
 
 }
 
-data class PlotOptions(var allowsInteractInventory: Boolean = true,
-                       var allowsInteractInputs: Boolean = true) {
-
-}
 
 class PlotUser(val user: Player) {
     val hasBanBypass get() = user.hasPermission("plots.admin.bypass.ban")

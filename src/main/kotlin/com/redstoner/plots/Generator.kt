@@ -51,7 +51,6 @@ abstract class PlotGenerator(val world: PlotWorld) : ChunkGenerator() {
 }
 
 interface GeneratorFactory {
-
     companion object GeneratorFactories {
         private val map: MutableMap<String, GeneratorFactory> = HashMap()
 
