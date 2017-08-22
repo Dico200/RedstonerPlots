@@ -55,6 +55,8 @@ abstract class GeneratorOptions {
 
     abstract fun generatorFactory(): GeneratorFactory
 
+    fun getGenerator(worldName: String) = generatorFactory().newPlotGenerator(worldName, this)
+
 }
 
 data class DefaultGeneratorOptions(val defaultBiome: Biome = Biome.JUNGLE,

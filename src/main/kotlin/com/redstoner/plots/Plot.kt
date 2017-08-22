@@ -2,7 +2,6 @@ package com.redstoner.plots
 
 import com.redstoner.plots.math.Vec2i
 import com.redstoner.plots.util.getPlayerName
-import com.redstoner.plots.util.toIntOr
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import java.util.*
@@ -19,8 +18,20 @@ class Plot(val world: PlotWorld,
     override fun hashCode(): Int = world.hashCode() + 31 * coord.hashCode()
 
     override fun toString(): String = "Plot(world=$world, coord=$coord)"
-}
 
+    fun canBuild(player: Player): Boolean {
+        val data = this.data ?: return false
+        return data.added.isAllowed(player.uniqueId) || data.owner?.matches(player) ?: false
+    }
+
+    fun isBanned(player: Player): Boolean {
+        val data = this.data ?: return false
+        return data.added.isBanned(player.uniqueId)
+    }
+
+    fun hasBlockVisitors(): Boolean = false
+
+}
 
 class PlotAdded {
     private val _map: MutableMap<UUID, Boolean> = HashMap()
@@ -102,34 +113,8 @@ data class PlotOwner(var uuid: UUID? = null,
 
     val offlinePlayer get() = if (uuid != null) Bukkit.getOfflinePlayer(uuid) else Bukkit.getOfflinePlayer(name)
 
-}
-
-
-class PlotUser(val user: Player) {
-    val hasBanBypass get() = user.hasPermission("plots.admin.bypass.ban")
-    val hasGamemodeBypass get() = user.hasPermission("plots.admin.bypass.gamemode")
-    val hasAdminManage get() = user.hasPermission("plots.admin.manage")
-    val hasPlotHomeOthers get() = user.hasPermission("plots.command.home.others")
-    val hasRandomSpecific get() = user.hasPermission("plots.command.random.specific")
-    val plotLimit: Int
-        get() {
-            for (info in user.effectivePermissions) {
-                val perm = info.permission
-                if (perm.startsWith("plots.limit.")) {
-                    val limitString = perm.substring("plots.limit.".length)
-                    if (limitString == "*") {
-                        return Int.MAX_VALUE
-                    }
-                    return limitString.toIntOr {
-                        Main.instance.logger.severe("${user.name} has permission '$perm'. The suffix can not be parsed to an integer (or *).")
-                        DEFAULT_LIMIT
-                    }
-                }
-            }
-            return DEFAULT_LIMIT
-        }
-
-    companion object {
-        val DEFAULT_LIMIT = 1
+    fun matches(player: Player, allowNameMatch: Boolean = false): Boolean {
+        return player.uniqueId == uuid || (allowNameMatch && player.name == name)
     }
+
 }

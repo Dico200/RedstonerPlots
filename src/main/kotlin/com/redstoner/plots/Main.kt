@@ -10,6 +10,14 @@ import java.io.IOException
 import java.nio.charset.Charset
 
 class Main : JavaPlugin() {
+    companion object {
+        @JvmStatic
+        val instance: Main
+            get() = _instance!!
+
+        private var _instance: Main? = null
+    }
+
     val optionsFile: File
     var options: Options
         private set
@@ -34,14 +42,9 @@ class Main : JavaPlugin() {
         }
     }
 
-    companion object {
-        val instance: Main
-            get() = _instance ?: throw NullPointerException()
-
-        private var _instance: Main? = null
-    }
-
     override fun onEnable() {
+        loadWorlds(options)
+
         CommandBuilder()
                 .group("plot", "plots", "p")
                 .registerCommands(PlotCommands())

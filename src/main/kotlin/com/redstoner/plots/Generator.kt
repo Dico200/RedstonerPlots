@@ -1,6 +1,9 @@
 package com.redstoner.plots
 
-import com.redstoner.plots.math.*
+import com.redstoner.plots.math.Vec2i
+import com.redstoner.plots.math.clamp
+import com.redstoner.plots.math.even
+import com.redstoner.plots.math.umod
 import org.bukkit.*
 import org.bukkit.block.*
 import org.bukkit.entity.Entity
@@ -10,7 +13,8 @@ import java.util.*
 import kotlin.coroutines.experimental.buildIterator
 import kotlin.reflect.KClass
 
-abstract class PlotGenerator(val world: PlotWorld) : ChunkGenerator() {
+abstract class PlotGenerator: ChunkGenerator(), PlotProvider {
+    abstract val world: PlotWorld
 
     abstract val factory: GeneratorFactory
 
@@ -27,14 +31,6 @@ abstract class PlotGenerator(val world: PlotWorld) : ChunkGenerator() {
             }
         })
     }
-
-    abstract fun plotAt(x: Int, z: Int): Plot?
-
-    fun plotAt(vec: Vec2i): Plot? = plotAt(vec.x, vec.z)
-
-    fun plotAt(loc: Location): Plot? = plotAt(loc.x.floor(), loc.z.floor())
-
-    fun plotAt(block: Block): Plot? = plotAt(block.x, block.z)
 
     abstract fun updateOwner(plot: Plot)
 
@@ -68,19 +64,22 @@ interface GeneratorFactory {
 
     val optionsClass: KClass<out GeneratorOptions>
 
-    fun newPlotGenerator(world: PlotWorld): PlotGenerator
+    fun newPlotGenerator(worldName: String, options: GeneratorOptions): PlotGenerator
 
 }
 
-class DefaultPlotGenerator(world: PlotWorld) : PlotGenerator(world) {
-    private val o = world.options.generator as DefaultGeneratorOptions
+class DefaultPlotGenerator(name: String, private val o: DefaultGeneratorOptions) : PlotGenerator() {
+    //private val o = world.options.generator as DefaultGeneratorOptions
+    override val world: PlotWorld by lazy { getWorld(name)!! }
 
     override val factory = Factory
 
     companion object Factory : GeneratorFactory {
         override val name get() = "default"
         override val optionsClass get() = DefaultGeneratorOptions::class
-        override fun newPlotGenerator(world: PlotWorld): PlotGenerator = DefaultPlotGenerator(world)
+        override fun newPlotGenerator(worldName: String, options: GeneratorOptions): PlotGenerator {
+            return DefaultPlotGenerator(worldName, options as DefaultGeneratorOptions)
+        }
     }
 
     private inline fun <T> generate(chunkX: Int, chunkZ: Int, floor: T, wall: T, pathMain: T, pathAlt: T, fill: T, setter: (Int, Int, Int, T) -> Unit) {
