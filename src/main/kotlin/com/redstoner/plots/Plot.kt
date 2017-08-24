@@ -11,7 +11,7 @@ import java.util.*
 fun PlotData?.canBuild(user: Player): Boolean = this?.canBuild(user) == true
 fun PlotData?.isAllowed(user: Player): Boolean = this?.isAllowed(user) == true
 fun PlotData?.isBanned(user: Player): Boolean = this?.isBanned(user) == true
-val PlotData?.allowsInteractInputs: Boolean get() = this?.allowsInteractInputs ?: false
+fun PlotData?.hasBlockVisitors(): Boolean = this?.hasBlockVisitors() == true
 
 internal inline val st get() = Main.instance.storage
 

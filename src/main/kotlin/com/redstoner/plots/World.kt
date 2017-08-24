@@ -8,6 +8,7 @@ import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.WorldCreator
 import org.bukkit.block.Block
+import org.bukkit.entity.Entity
 import org.bukkit.entity.Player
 import java.util.*
 import kotlin.coroutines.experimental.buildSequence
@@ -63,7 +64,7 @@ interface PlotProvider {
 
     fun plotAt(loc: Location): Plot? = plotAt(loc.x.floor(), loc.z.floor())
 
-    fun plotAt(player: Player): Plot? = plotAt(player.location)
+    fun plotAt(entity: Entity): Plot? = plotAt(entity.location)
 
     fun plotAt(block: Block): Plot? = plotAt(block.x, block.z)
 }
@@ -86,6 +87,23 @@ class PlotWorld(val name: String,
     }
 
     fun plotByID(id: Vec2i): Plot? = plotByID(id.x, id.z)
+
+    fun enforceOptionsIfApplicable() {
+        val world = world
+        val options = options
+        if (options.dayTime) {
+            world.setGameRuleValue("doDaylightCycle", "false")
+            world.setTime(6000)
+        }
+
+        if (options.noWeather) {
+            world.setStorm(false)
+            world.setThundering(false)
+            world.weatherDuration = Integer.MAX_VALUE
+        }
+
+        world.setGameRuleValue("doTileDrops", "${options.doTileDrops}")
+    }
 
 }
 

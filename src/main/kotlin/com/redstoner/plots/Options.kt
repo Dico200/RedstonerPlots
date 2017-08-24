@@ -33,7 +33,7 @@ class Options {
 
 }
 
-data class WorldOptions(var gameMode: GameMode = GameMode.CREATIVE,
+data class WorldOptions(var gameMode: GameMode? = GameMode.CREATIVE,
                         var dayTime: Boolean = true,
                         var noWeather: Boolean = true,
                         var dropEntityItems: Boolean = true,
