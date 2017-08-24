@@ -7,6 +7,12 @@ import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import java.util.*
 
+// convenience functions when the type is nullable
+fun PlotData?.canBuild(user: Player): Boolean = this?.canBuild(user) == true
+fun PlotData?.isAllowed(user: Player): Boolean = this?.isAllowed(user) == true
+fun PlotData?.isBanned(user: Player): Boolean = this?.isBanned(user) == true
+val PlotData?.allowsInteractInputs: Boolean get() = this?.allowsInteractInputs ?: false
+
 internal inline val st get() = Main.instance.storage
 
 class Plot(val world: PlotWorld,
@@ -24,9 +30,7 @@ class Plot(val world: PlotWorld,
     /*
     Data delegation
      */
-    override val allowedPlayers get() = synchronized(data) { data.allowedPlayers }
-    override val bannedPlayers get() = synchronized(data) { data.bannedPlayers }
-    override fun setPlayerState(uuid: UUID, state: Boolean?): Boolean = synchronized(data) {
+    override fun setPlayerState(uuid: UUID, state: Boolean?): Boolean {
         if (data.setPlayerState(uuid, state)) {
             st.setPlotPlayerState(this, uuid, state)
             return true
@@ -64,7 +68,7 @@ class Plot(val world: PlotWorld,
 }
 
 interface PlotData {
-    val isLoaded: Boolean
+    var isLoaded: Boolean
     var owner: PlotOwner?
     val bannedPlayers: Collection<UUID>
     val allowedPlayers: Collection<UUID>
@@ -87,21 +91,24 @@ interface PlotData {
     fun allow(player: Player): Boolean = setPlayerState(player.uniqueId, true)
 
     fun neutralize(player: Player): Boolean = setPlayerState(player.uniqueId, null)
-
-    fun unwrap(): BasePlotData
 }
 
 class BasePlotData : PlotData {
-    val addedPlayers = HashMap<UUID, Boolean>()
-    override var isLoaded = false
-    override var owner: PlotOwner? = null
-    override val allowedPlayers get() = addedPlayers.filterValues { it }.keys
-    override val bannedPlayers get() = addedPlayers.filterValues { !it }.keys
-    override var allowsInteractInputs = true
-    override var allowsInteractInventory = true
+    private val addedPlayers = HashMap<UUID, Boolean>()
+    //@formatter:off
+    override @Volatile var isLoaded = false
+    override @Volatile var owner: PlotOwner? = null
+    override @Volatile var allowsInteractInputs = true
+    override @Volatile var allowsInteractInventory = true
+    //@formatter:on
 
-    override fun getPlayerState(uuid: UUID) = addedPlayers.get(uuid)
+    override val allowedPlayers @Synchronized get() = addedPlayers.filterValues { it }.keys
 
+    override val bannedPlayers @Synchronized get() = addedPlayers.filterValues { !it }.keys
+
+    override fun getPlayerState(uuid: UUID) = addedPlayers[uuid]
+
+    @Synchronized
     override fun setPlayerState(uuid: UUID, state: Boolean?): Boolean {
         if (state == null) {
             return addedPlayers.remove(uuid) != null
@@ -116,8 +123,6 @@ class BasePlotData : PlotData {
                 && owner === null
                 && addedPlayers.isEmpty()
     }
-
-    override fun unwrap() = this
 }
 
 data class PlotOwner(val uuid: UUID? = null,

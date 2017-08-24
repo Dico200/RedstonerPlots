@@ -160,6 +160,7 @@ class SqlBacking(val driver: SqlDriver) : Backing {
                 setInt(3, plotFor.coord.z)
                 executeQuery().use {
                     if (!next()) {
+                        plotFor.data.isLoaded = true
                         return null
                     }
 
@@ -169,7 +170,11 @@ class SqlBacking(val driver: SqlDriver) : Backing {
                     val optInteractInputs = getBoolean(4)
                     val optInteractInventory = getBoolean(5)
 
-                    val data = BasePlotData()
+                    var data = plotFor.data
+                    if (data.isLoaded) {
+                        data = BasePlotData()
+                    }
+
                     if (ownerName != null || ownerUUID != null) {
                         data.owner = PlotOwner(ownerUUID, ownerName)
                     }
@@ -187,6 +192,7 @@ class SqlBacking(val driver: SqlDriver) : Backing {
                         }
                     }
 
+                    data.isLoaded = true
                     return data
                 }
             }

@@ -1,6 +1,7 @@
 package com.redstoner.plots
 
 import com.redstoner.plots.util.toIntOr
+import io.dico.dicore.command.chat.Formatting
 import org.bukkit.entity.Player
 
 val Player.hasBanBypass get() = hasPermission("plots.admin.bypass.ban")
@@ -28,3 +29,14 @@ val Player.plotLimit: Int
     }
 
 val DEFAULT_LIMIT = 1
+internal val prefix = Formatting.translateChars('&', "&4[&c${Main.instance.name}&4] &a")
+
+fun Player.sendPlotMessage(except: Boolean = false, nopermit: Boolean = false, message: String) {
+    if (except) {
+        sendMessage(prefix + Formatting.YELLOW + Formatting.translateChars('&', message))
+    } else if (nopermit) {
+        sendMessage(prefix + Formatting.RED + Formatting.translateChars('&', message))
+    } else {
+        sendMessage(prefix + Formatting.translateChars('&', message))
+    }
+}
