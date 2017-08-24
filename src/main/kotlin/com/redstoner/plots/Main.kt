@@ -2,8 +2,10 @@ package com.redstoner.plots
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.common.io.Files
+import com.redstoner.plots.storage.Storage
 import io.dico.dicore.command.CommandBuilder
 import io.dico.dicore.command.EOverridePolicy
+import io.dico.dicore.util.Registrator
 import org.bukkit.plugin.java.JavaPlugin
 import java.io.File
 import java.io.IOException
@@ -19,8 +21,10 @@ class Main : JavaPlugin() {
     }
 
     val optionsFile: File
+    val storage: Storage
     var options: Options
         private set
+    private var worldsLoaded = false
 
     init {
         _instance = this
@@ -40,10 +44,30 @@ class Main : JavaPlugin() {
                 saveOptions()
             }
         }
+
+        storage = options.storage.newStorageInstance()
+    }
+
+    fun loadWorldsIfNeeded() {
+        if (!worldsLoaded) {
+            synchronized(this) {
+                if (worldsLoaded) {
+                    return
+                }
+                worldsLoaded = true
+            }
+            loadWorlds(options)
+        }
     }
 
     override fun onEnable() {
-        loadWorlds(options)
+        registerListeners(Registrator(this))
+
+        // there must be one world loaded before we can load worlds, as the creation of new worlds requires a world to be loaded
+        // to get the default gamemode. It's completely retarded.
+        if (server.worlds.size > 0) {
+            loadWorldsIfNeeded()
+        }
 
         CommandBuilder()
                 .group("plot", "plots", "p")
@@ -52,9 +76,15 @@ class Main : JavaPlugin() {
                 .getDispatcher().registerToCommandMap("redstonerplots:", EOverridePolicy.OVERRIDE_ALL)
     }
 
+    override fun onDisable() {
+        worldsLoaded = false
+    }
+
     fun loadOptions() {
         try {
-            options.mergeFrom(Files.newReader(optionsFile, Charset.defaultCharset()))
+            Files.newReader(optionsFile, Charset.defaultCharset()).use {
+                options.mergeFrom(it)
+            }
             println("Config: $options")
         } catch (ex: JsonProcessingException) {
             logger.severe("there's a syntax error in the options file: ${ex.message}")
@@ -73,11 +103,15 @@ class Main : JavaPlugin() {
 
     fun saveOptions() {
         try {
-            options.writeTo(Files.newWriter(optionsFile, Charset.defaultCharset()))
+            Files.newWriter(optionsFile, Charset.defaultCharset()).use {
+                options.writeTo(it)
+            }
         } catch (ex: IOException) {
             logger.severe("failed to save the options: $ex")
             ex.printStackTrace()
         }
     }
+
+    override fun getDefaultWorldGenerator(worldName: String?, id: String?) = getWorld(worldName!!)?.generator
 
 }

@@ -2,6 +2,7 @@ package com.redstoner.plots
 
 import com.redstoner.plots.math.Vec2i
 import com.redstoner.plots.math.floor
+import kotlinx.coroutines.experimental.launch
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.World
@@ -9,6 +10,7 @@ import org.bukkit.WorldCreator
 import org.bukkit.block.Block
 import org.bukkit.entity.Player
 import java.util.*
+import kotlin.coroutines.experimental.buildSequence
 
 val worlds: Map<String, PlotWorld> get() = _worlds
 private val _worlds: MutableMap<String, PlotWorld> = HashMap()
@@ -53,6 +55,19 @@ fun loadWorlds(options: Options) {
 
 }
 
+interface PlotProvider {
+
+    fun plotAt(x: Int, z: Int): Plot?
+
+    fun plotAt(vec: Vec2i): Plot? = plotAt(vec.x, vec.z)
+
+    fun plotAt(loc: Location): Plot? = plotAt(loc.x.floor(), loc.z.floor())
+
+    fun plotAt(player: Player): Plot? = plotAt(player.location)
+
+    fun plotAt(block: Block): Plot? = plotAt(block.x, block.z)
+}
+
 class PlotWorld(val name: String,
                 val options: WorldOptions,
                 val generator: PlotGenerator) : PlotProvider by generator {
@@ -74,22 +89,11 @@ class PlotWorld(val name: String,
 
 }
 
-interface PlotProvider {
-
-    fun plotAt(x: Int, z: Int): Plot?
-
-    fun plotAt(vec: Vec2i): Plot? = plotAt(vec.x, vec.z)
-
-    fun plotAt(loc: Location): Plot? = plotAt(loc.x.floor(), loc.z.floor())
-
-    fun plotAt(player: Player): Plot? = plotAt(player.location)
-
-    fun plotAt(block: Block): Plot? = plotAt(block.x, block.z)
-}
-
 abstract class PlotContainer {
 
-    abstract fun plotAt(x: Int, z: Int): Plot?
+    abstract fun ployByID(x: Int, z: Int): Plot?
+
+    abstract fun nextEmptyPlot(): Plot?
 
 }
 
@@ -116,13 +120,34 @@ class DefaultPlotContainer(private val world: PlotWorld) : PlotContainer() {
             val x = it - axisLimit
             Array(arraySize, {
                 val z = it - axisLimit
-                cur?.plotAt(x, z) ?: Plot(world, Vec2i(x, z))
+                cur?.ployByID(x, z) ?: Plot(world, Vec2i(x, z))
             })
         })
     }
 
-    override fun plotAt(x: Int, z: Int): Plot? {
+    override fun ployByID(x: Int, z: Int): Plot? {
         return plots[x][z]
+    }
+
+    override fun nextEmptyPlot(): Plot? {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    fun allPlots(): Sequence<Plot> = buildSequence {
+        for (array in plots) {
+            yieldAll(array.iterator())
+        }
+    }
+
+    fun loadAllData() {
+        val channel = Main.instance.storage.readPlotData(allPlots(), 100).channel
+        launch(Main.instance.storage.asyncDispatcher) {
+            for ((plot, data) in channel) {
+                if (data != null) {
+                    plot.data = data
+                }
+            }
+        }
     }
 
 }

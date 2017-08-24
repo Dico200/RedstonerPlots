@@ -1,6 +1,9 @@
 package com.redstoner.plots.storage
 
-import com.redstoner.plots.*
+import com.redstoner.plots.DataConnectionOptions
+import com.redstoner.plots.Plot
+import com.redstoner.plots.PlotData
+import com.redstoner.plots.PlotOwner
 import com.redstoner.plots.storage.backing.Backing
 import com.redstoner.plots.storage.backing.MySqlDriver
 import com.redstoner.plots.storage.backing.SqlBacking
@@ -34,14 +37,13 @@ interface Storage {
 
     fun getOwnedPlots(user: PlotOwner): CompletableFuture<List<SerializablePlot>>
 
-
-    fun setPlotData(plotFor: Plot, data: PlotData): CompletableFuture<Unit>
-
-    fun setPlotOwner(plotFor: Plot, owner: PlotOwner): CompletableFuture<Unit>
-
-    fun setPlotOptions(plotFor: Plot, options: PlotOptions): CompletableFuture<Unit>
+    fun setPlotOwner(plotFor: Plot, owner: PlotOwner?): CompletableFuture<Unit>
 
     fun setPlotPlayerState(plotFor: Plot, player: UUID, state: Boolean?): CompletableFuture<Unit>
+
+    fun setPlotAllowsInteractInventory(plot: Plot, value: Boolean): CompletableFuture<Unit>
+
+    fun setPlotAllowsInteractInputs(plot: Plot, value: Boolean): CompletableFuture<Unit>
 
 }
 
@@ -63,14 +65,13 @@ class AbstractStorage internal constructor(val backing: Backing) : Storage {
 
     override fun getOwnedPlots(user: PlotOwner) = future { backing.getOwnedPlots(user) }
 
-    override fun setPlotData(plotFor: Plot, data: PlotData) = future { backing.setPlotData(plotFor, data) }
-
-    override fun setPlotOwner(plotFor: Plot, owner: PlotOwner) = future { backing.setPlotOwner(plotFor, owner) }
-
-    override fun setPlotOptions(plotFor: Plot, options: PlotOptions) = future { backing.setPlotOptions(plotFor, options) }
+    override fun setPlotOwner(plotFor: Plot, owner: PlotOwner?) = future { backing.setPlotOwner(plotFor, owner) }
 
     override fun setPlotPlayerState(plotFor: Plot, player: UUID, state: Boolean?) = future { backing.setPlotPlayerState(plotFor, player, state) }
 
+    override fun setPlotAllowsInteractInventory(plot: Plot, value: Boolean) = future { backing.setPlotAllowsInteractInventory(plot, value) }
+
+    override fun setPlotAllowsInteractInputs(plot: Plot, value: Boolean) = future { backing.setPlotAllowsInteractInputs(plot, value) }
 }
 
 interface StorageFactory {
@@ -79,10 +80,12 @@ interface StorageFactory {
 
         fun registerFactory(method: String, generator: StorageFactory): Boolean = map.putIfAbsent(method.toLowerCase(), generator) == null
 
-        fun getFactory(method: String): StorageFactory? = map.get(method.toLowerCase())
+        fun getFactory(method: String): StorageFactory? = map[method.toLowerCase()]
 
         init {
-            ConnectionStorageFactory().register()
+            // have to write the code like this in kotlin.
+            // This code is absolutely disgusting
+            ConnectionStorageFactory().register(this)
         }
     }
 
@@ -100,8 +103,10 @@ class ConnectionStorageFactory : StorageFactory {
         this
     }
 
-    fun register() {
-        types.keys.forEach { StorageFactory.registerFactory(it, this) }
+    fun register(companion: StorageFactory.StorageFactories) {
+        types.keys.forEach {
+            companion.registerFactory(it, this)
+        }
     }
 
     override fun newStorageInstance(method: String, options: Any): Storage {

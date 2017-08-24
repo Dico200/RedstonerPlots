@@ -17,8 +17,8 @@ import java.util.*
 class SqlBacking(val driver: SqlDriver) : Backing {
     private companion object {
         @JvmStatic
-        val plotQuery = "select plot_id, owner_name, owner_uuid, opt_outsider_i_inventory, " +
-                "opt_outsider_i_inputs from plots where world_id = ? and idx = ? and idz = ?;"
+        val plotQuery = "select plot_id, owner_name, owner_uuid, opt_interact_inventory, " +
+                "opt_interact_inputs from plots where world_id = ? and idx = ? and idz = ?;"
 
         @JvmStatic
         val localAddedQuery = "SELECT uuid, flag FROM added_local WHERE plot_id = ?;"
@@ -168,12 +168,13 @@ class SqlBacking(val driver: SqlDriver) : Backing {
                     val ownerUUID = getBytes(3).toUUID()
                     val optInteractInputs = getBoolean(4)
                     val optInteractInventory = getBoolean(5)
-                    val data = PlotData(
-                            owner = PlotOwner(ownerUUID, ownerName),
-                            options = PlotOptions(
-                                    allowsInteractInventory = optInteractInventory,
-                                    allowsInteractInputs = optInteractInputs)
-                    )
+
+                    val data = BasePlotData()
+                    if (ownerName != null || ownerUUID != null) {
+                        data.owner = PlotOwner(ownerUUID, ownerName)
+                    }
+                    data.allowsInteractInventory = optInteractInventory
+                    data.allowsInteractInputs = optInteractInputs
 
                     conn.prepareStatement(localAddedQuery).use {
                         setLong(1, plotId)
@@ -181,7 +182,7 @@ class SqlBacking(val driver: SqlDriver) : Backing {
                             while (next()) {
                                 val uuid = getBytes(1).toUUID() ?: continue
                                 val flag = getBoolean(2)
-                                data.added[uuid] = flag
+                                data.setPlayerState(uuid, flag)
                             }
                         }
                     }
@@ -230,12 +231,12 @@ class SqlBacking(val driver: SqlDriver) : Backing {
             list
         } ?: emptyList()
     }
-
+/*
     suspend override fun setPlotData(plotFor: Plot, data: PlotData) {
         connCatch({ "Failed to set plot data for $plotFor" }) {
             val world = plotFor.world.world
             val plotId = getPlotId(this, world.uid, world.name, plotFor.coord.x, plotFor.coord.z)
-            val reset = data.equalsDefaultData()
+            val reset = data.dataIsEmpty()
 
             if (reset) {
                 prepareStatement("DELETE FROM plots WHERE plot_id = ?;").use {
@@ -247,8 +248,8 @@ class SqlBacking(val driver: SqlDriver) : Backing {
                         " WHERE plot_id = ?;").use {
                     setBytes(1, data.owner?.uuid.toByteArray())
                     setString(2, data.owner?.name)
-                    setBoolean(3, data.options.allowsInteractInventory)
-                    setBoolean(4, data.options.allowsInteractInputs)
+                    setBoolean(3, data.allowsInteractInventory)
+                    setBoolean(4, data.allowsInteractInputs)
                     setInt(5, plotId)
                     executeUpdate()
                 }
@@ -261,7 +262,7 @@ class SqlBacking(val driver: SqlDriver) : Backing {
 
             if (!reset) {
                 prepareStatement("INSERT INTO added_local VALUES (?, ?, ?);").use {
-                    data.added.map.forEach { uuid, flag ->
+                    data.addedPlayers.forEach { uuid, flag ->
                         setInt(1, plotId)
                         setBytes(2, uuid.toByteArray())
                         setBoolean(3, flag)
@@ -272,18 +273,68 @@ class SqlBacking(val driver: SqlDriver) : Backing {
             }
 
         }
-    }
+    }*/
 
-    suspend override fun setPlotOwner(plotFor: Plot, owner: PlotOwner) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
+    suspend override fun setPlotOwner(plotFor: Plot, owner: PlotOwner?) {
+        connCatch({ "Failed to set plot owner for $plotFor" }) {
+            val world = plotFor.world.world
+            val plotId = getPlotId(this, world.uid, world.name, plotFor.coord.x, plotFor.coord.z)
 
-    suspend override fun setPlotOptions(plotFor: Plot, options: PlotOptions) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+            prepareStatement("UPDATE plots SET owner_uuid = ?, owner_name = ? WHERE plot_id = ?;").use {
+                setBytes(1, owner?.uuid.toByteArray())
+                setString(2, owner?.name)
+                setInt(3, plotId)
+                executeUpdate()
+            }
+        }
     }
 
     suspend override fun setPlotPlayerState(plotFor: Plot, player: UUID, state: Boolean?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        connCatch({ "Failed to set plot player state for $plotFor and player with uuid $player" }) {
+            val world = plotFor.world.world
+            val plotId = getPlotId(this, world.uid, world.name, plotFor.coord.x, plotFor.coord.z)
+
+            if (state != null) {
+                prepareStatement("REPLACE added_local VALUES (?, ?, ?);").use {
+                    setInt(1, plotId)
+                    setBytes(2, player.toByteArray())
+                    setBoolean(3, state)
+                    executeUpdate()
+                }
+            } else {
+                prepareStatement("DELETE FROM added_local WHERE plot_id = ? AND uuid = ?;").use {
+                    setInt(1, plotId)
+                    setBytes(2, player.toByteArray())
+                    executeUpdate()
+                }
+            }
+        }
+    }
+
+    suspend override fun setPlotAllowsInteractInventory(plotFor: Plot, value: Boolean) {
+        connCatch({ "Failed to set plot option allowInteractInventory for $plotFor" }) {
+            val world = plotFor.world.world
+            val plotId = getPlotId(this, world.uid, world.name, plotFor.coord.x, plotFor.coord.z)
+
+            prepareStatement("UPDATE plots SET opt_interact_inventory = ? WHERE plot_id = ?;").use {
+                setBoolean(1, value)
+                setInt(2, plotId)
+                executeUpdate()
+            }
+        }
+    }
+
+    suspend override fun setPlotAllowsInteractInputs(plotFor: Plot, value: Boolean) {
+        connCatch({ "Failed to set plot option allowInteractInputs for $plotFor" }) {
+            val world = plotFor.world.world
+            val plotId = getPlotId(this, world.uid, world.name, plotFor.coord.x, plotFor.coord.z)
+
+            prepareStatement("UPDATE plots SET opt_interact_inputs = ? WHERE plot_id = ?;").use {
+                setBoolean(1, value)
+                setInt(2, plotId)
+                executeUpdate()
+            }
+        }
     }
 }
 

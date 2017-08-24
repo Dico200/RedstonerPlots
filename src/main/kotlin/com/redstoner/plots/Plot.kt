@@ -1,106 +1,127 @@
 package com.redstoner.plots
 
 import com.redstoner.plots.math.Vec2i
+import com.redstoner.plots.util.equalsNullable
 import com.redstoner.plots.util.getPlayerName
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import java.util.*
 
+internal inline val st get() = Main.instance.storage
+
 class Plot(val world: PlotWorld,
            val coord: Vec2i,
-           var data: PlotData? = null) {
+           var data: PlotData = BasePlotData()) : PlotData by data {
+
     val id get() = "${coord.x}:${coord.z}"
-
-    val isLoaded: Boolean get() = data !== null
-
-    override fun equals(other: Any?): Boolean = (this === other) || (other is Plot && world == other.world && coord == other.coord)
-
-    override fun hashCode(): Int = world.hashCode() + 31 * coord.hashCode()
 
     override fun toString(): String = "Plot(world=$world, coord=$coord)"
 
-    fun canBuild(player: Player): Boolean {
-        val data = this.data ?: return false
-        return data.added.isAllowed(player.uniqueId) || data.owner?.matches(player) ?: false
-    }
-
-    fun isBanned(player: Player): Boolean {
-        val data = this.data ?: return false
-        return data.added.isBanned(player.uniqueId)
-    }
+    fun canBuild(player: Player): Boolean = isAllowed(player) || (owner?.matches(player) ?: false)
 
     fun hasBlockVisitors(): Boolean = false
 
+    /*
+    Data delegation
+     */
+    override val allowedPlayers get() = synchronized(data) { data.allowedPlayers }
+    override val bannedPlayers get() = synchronized(data) { data.bannedPlayers }
+    override fun setPlayerState(uuid: UUID, state: Boolean?): Boolean = synchronized(data) {
+        if (data.setPlayerState(uuid, state)) {
+            st.setPlotPlayerState(this, uuid, state)
+            return true
+        }
+        return false
+    }
+
+    override var allowsInteractInventory: Boolean
+        get() = data.allowsInteractInventory
+        set(value) {
+            if (allowsInteractInventory != value) {
+                st.setPlotAllowsInteractInventory(this, value)
+                data.allowsInteractInventory = value
+            }
+        }
+
+    override var allowsInteractInputs: Boolean
+        get() = data.allowsInteractInputs
+        set(value) {
+            if (allowsInteractInputs != value) {
+                st.setPlotAllowsInteractInputs(this, value)
+                data.allowsInteractInputs = value
+            }
+        }
+
+    override var owner: PlotOwner?
+        get() = data.owner
+        set(value) {
+            if (!value.equalsNullable(data.owner)) {
+                st.setPlotOwner(this, value)
+                data.owner = value
+            }
+        }
+
 }
 
-class PlotAdded {
-    private val _map: MutableMap<UUID, Boolean> = HashMap()
+interface PlotData {
+    val isLoaded: Boolean
+    var owner: PlotOwner?
+    val bannedPlayers: Collection<UUID>
+    val allowedPlayers: Collection<UUID>
+    var allowsInteractInputs: Boolean
+    var allowsInteractInventory: Boolean
 
-    val map: Map<UUID, Boolean> get() = _map
+    fun dataIsEmpty(): Boolean
 
-    fun isAllowed(uuid: UUID): Boolean = _map.getOrDefault(uuid, false)
+    fun getPlayerState(uuid: UUID): Boolean?
 
-    fun isBanned(uuid: UUID): Boolean = !_map.getOrDefault(uuid, true)
+    // returns true if a change was made
+    fun setPlayerState(uuid: UUID, state: Boolean?): Boolean
 
-    operator fun get(uuid: UUID): Boolean? = _map.get(uuid)
+    fun isAllowed(player: Player) = getPlayerState(player.uniqueId) == true
 
-    fun ban(uuid: UUID) = set(uuid, false)
+    fun isBanned(player: Player) = getPlayerState(player.uniqueId) == false
 
-    fun allow(uuid: UUID) = set(uuid, true)
+    fun ban(player: Player): Boolean = setPlayerState(player.uniqueId, false)
 
-    operator fun set(uuid: UUID, state: Boolean?) {
-        synchronized(this) {
-            if (state == null) {
-                _map.remove(uuid)
-            } else {
-                _map.put(uuid, state)
-            }
+    fun allow(player: Player): Boolean = setPlayerState(player.uniqueId, true)
+
+    fun neutralize(player: Player): Boolean = setPlayerState(player.uniqueId, null)
+
+    fun unwrap(): BasePlotData
+}
+
+class BasePlotData : PlotData {
+    val addedPlayers = HashMap<UUID, Boolean>()
+    override var isLoaded = false
+    override var owner: PlotOwner? = null
+    override val allowedPlayers get() = addedPlayers.filterValues { it }.keys
+    override val bannedPlayers get() = addedPlayers.filterValues { !it }.keys
+    override var allowsInteractInputs = true
+    override var allowsInteractInventory = true
+
+    override fun getPlayerState(uuid: UUID) = addedPlayers.get(uuid)
+
+    override fun setPlayerState(uuid: UUID, state: Boolean?): Boolean {
+        if (state == null) {
+            return addedPlayers.remove(uuid) != null
+        } else {
+            return addedPlayers.put(uuid, state) != state
         }
     }
 
-    fun getBannedPlayers(): Collection<UUID> = synchronized(this) {
-        _map.filterValues { !it }.keys
+    override fun dataIsEmpty(): Boolean {
+        return allowsInteractInventory
+                && allowsInteractInputs
+                && owner === null
+                && addedPlayers.isEmpty()
     }
 
-    fun getAllowedPlayers(): Collection<UUID> = synchronized(this) {
-        _map.filterValues { it }.keys
-    }
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is PlotAdded) return false
-
-        if (_map != other._map) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        return _map.hashCode()
-    }
-
+    override fun unwrap() = this
 }
 
-/**
- * Encompasses the data of a plot,
- * without accompanying the plot's location
- */
-data class PlotData(var owner: PlotOwner? = null,
-                    var options: PlotOptions = PlotOptions(),
-                    var added: PlotAdded = PlotAdded()) {
-
-    fun equalsDefaultData(): Boolean {
-        return this == DEFAULT
-    }
-
-    private companion object {
-        val DEFAULT = PlotData()
-    }
-
-}
-
-data class PlotOwner(var uuid: UUID? = null,
-                     var name: String? = null) {
+data class PlotOwner(val uuid: UUID? = null,
+                     val name: String? = null) {
 
     init {
         uuid ?: name ?: throw IllegalArgumentException("uuid and/or name must be present")

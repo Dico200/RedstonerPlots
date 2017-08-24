@@ -10,6 +10,7 @@ import org.bukkit.event.entity.EntityExplodeEvent
 import org.bukkit.event.entity.ExplosionPrimeEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerMoveEvent
+import org.bukkit.event.world.WorldLoadEvent
 import org.bukkit.inventory.InventoryHolder
 
 inline fun Block.toVec2i(): Vec2i = Vec2i(x, z)
@@ -45,6 +46,12 @@ private fun checkPistonAction(event: BlockPistonEvent, affectedBlocks: List<Bloc
 }
 
 val registerListeners: Registrator.() -> Unit = {
+    registerListener<WorldLoadEvent> {
+        Main.instance.server.scheduler.runTask(Main.instance) {
+            Main.instance.loadWorldsIfNeeded()
+        }
+    }
+
     registerListener<PlayerMoveEvent> h@ {
         val from = this.from
         val to = this.to
@@ -115,11 +122,6 @@ val registerListeners: Registrator.() -> Unit = {
         if (clickedPlot?.isBanned(user) == true) {
 
         }
-
-
-
-
-
     }
 
 }

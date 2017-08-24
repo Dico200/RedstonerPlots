@@ -2,7 +2,6 @@ package com.redstoner.plots.storage.backing
 
 import com.redstoner.plots.Plot
 import com.redstoner.plots.PlotData
-import com.redstoner.plots.PlotOptions
 import com.redstoner.plots.PlotOwner
 import com.redstoner.plots.storage.SerializablePlot
 import kotlinx.coroutines.experimental.channels.ProducerScope
@@ -26,13 +25,12 @@ interface Backing {
 
     suspend fun getOwnedPlots(user: PlotOwner): List<SerializablePlot>
 
-
-    suspend fun setPlotData(plotFor: Plot, data: PlotData)
-
-    suspend fun setPlotOwner(plotFor: Plot, owner: PlotOwner)
-
-    suspend fun setPlotOptions(plotFor: Plot, options: PlotOptions)
+    suspend fun setPlotOwner(plotFor: Plot, owner: PlotOwner?)
 
     suspend fun setPlotPlayerState(plotFor: Plot, player: UUID, state: Boolean?)
+
+    suspend fun setPlotAllowsInteractInventory(plot: Plot, value: Boolean)
+
+    suspend fun setPlotAllowsInteractInputs(plot: Plot, value: Boolean)
 
 }

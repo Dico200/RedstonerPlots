@@ -3,6 +3,7 @@ package com.redstoner.plots
 import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.*
+import com.fasterxml.jackson.databind.ser.std.StdSerializer
 import com.redstoner.plots.storage.Storage
 import com.redstoner.plots.storage.StorageFactory
 import com.redstoner.plots.util.Jackson
@@ -32,11 +33,6 @@ class Options {
 
 }
 
-data class PlotOptions(var allowsInteractInventory: Boolean = true,
-                       var allowsInteractInputs: Boolean = true) {
-
-}
-
 data class WorldOptions(var gameMode: GameMode = GameMode.CREATIVE,
                         var dayTime: Boolean = true,
                         var noWeather: Boolean = true,
@@ -45,7 +41,7 @@ data class WorldOptions(var gameMode: GameMode = GameMode.CREATIVE,
                         var disableExplosions: Boolean = true,
                         var blockPortalCreation: Boolean = true,
                         var blockMobSpawning: Boolean = true,
-                        var blockedItems: Set<Material> = EnumSet.of(Material.AIR),
+                        var blockedItems: Set<Material> = EnumSet.of(Material.FLINT_AND_STEEL, Material.SNOW_BALL),
                         var axisLimit: Int = 10,
                         var generator: GeneratorOptions = DefaultGeneratorOptions()) {
 
@@ -59,27 +55,17 @@ abstract class GeneratorOptions {
 
 }
 
-data class DefaultGeneratorOptions(val defaultBiome: Biome = Biome.JUNGLE,
-                                   val wallType: BlockType = BlockType(Material.STEP),
-                                   val floorType: BlockType = BlockType(Material.QUARTZ_BLOCK),
-                                   val fillType: BlockType = BlockType(Material.QUARTZ_BLOCK),
-                                   val pathMainType: BlockType = BlockType(Material.SANDSTONE),
-                                   val pathAltType: BlockType = BlockType(Material.REDSTONE_BLOCK),
-                                   val plotSize: Int = 101,
-                                   val pathSize: Int = 9,
-                                   val floorHeight: Int = 64,
-                                   val offsetX: Int = 0,
-                                   val offsetZ: Int = 0) : GeneratorOptions() {
-
-    @Transient
-    val sectionSize = plotSize + pathSize
-    @Transient
-    val pathOffset = (if (pathSize % 2 == 0) pathSize + 2 else pathSize + 1) / 2
-
-    @Transient
-    val makePathMain = pathSize > 2
-    @Transient
-    val makePathAlt = pathSize > 4
+data class DefaultGeneratorOptions(var defaultBiome: Biome = Biome.JUNGLE,
+                                   var wallType: BlockType = BlockType(Material.STEP),
+                                   var floorType: BlockType = BlockType(Material.QUARTZ_BLOCK),
+                                   var fillType: BlockType = BlockType(Material.QUARTZ_BLOCK),
+                                   var pathMainType: BlockType = BlockType(Material.SANDSTONE),
+                                   var pathAltType: BlockType = BlockType(Material.REDSTONE_BLOCK),
+                                   var plotSize: Int = 101,
+                                   var pathSize: Int = 9,
+                                   var floorHeight: Int = 64,
+                                   var offsetX: Int = 0,
+                                   var offsetZ: Int = 0) : GeneratorOptions() {
 
     override fun generatorFactory(): GeneratorFactory = DefaultPlotGenerator
 
@@ -133,7 +119,7 @@ class StorageOptionsDeserializer : JsonDeserializer<StorageOptions>() {
 
 }
 
-class StorageOptionsSerializer : JsonSerializer<StorageOptions>() {
+class StorageOptionsSerializer : StdSerializer<StorageOptions>(StorageOptions::class.java) {
 
     override fun serialize(value: StorageOptions?, gen: JsonGenerator?, serializers: SerializerProvider?) {
         with(gen!!) {

@@ -19,8 +19,8 @@ create table plots (
   idz INT(32) NOT NULL,
   owner_name VARCHAR(16),
   owner_uuid BINARY(16),
-  opt_outsider_i_inventory BOOLEAN NOT NULL DEFAULT FALSE,
-  opt_outsider_i_inputs BOOLEAN NOT NULL DEFAULT FALSE,
+  opt_interact_inventory BOOLEAN NOT NULL DEFAULT FALSE,
+  opt_interact_inputs BOOLEAN NOT NULL DEFAULT FALSE,
   UNIQUE KEY (world_id, idx, idz),
   FOREIGN KEY (world_id) REFERENCES worlds(world_id)
 );

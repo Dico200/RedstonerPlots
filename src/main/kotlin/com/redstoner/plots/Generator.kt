@@ -13,7 +13,7 @@ import java.util.*
 import kotlin.coroutines.experimental.buildIterator
 import kotlin.reflect.KClass
 
-abstract class PlotGenerator: ChunkGenerator(), PlotProvider {
+abstract class PlotGenerator : ChunkGenerator(), PlotProvider {
     abstract val world: PlotWorld
 
     abstract val factory: GeneratorFactory
@@ -69,9 +69,7 @@ interface GeneratorFactory {
 }
 
 class DefaultPlotGenerator(name: String, private val o: DefaultGeneratorOptions) : PlotGenerator() {
-    //private val o = world.options.generator as DefaultGeneratorOptions
     override val world: PlotWorld by lazy { getWorld(name)!! }
-
     override val factory = Factory
 
     companion object Factory : GeneratorFactory {
@@ -82,13 +80,25 @@ class DefaultPlotGenerator(name: String, private val o: DefaultGeneratorOptions)
         }
     }
 
-    private inline fun <T> generate(chunkX: Int, chunkZ: Int, floor: T, wall: T, pathMain: T, pathAlt: T, fill: T, setter: (Int, Int, Int, T) -> Unit) {
-        val sectionSize = o.sectionSize
-        val pathOffset = o.pathOffset
+    val sectionSize = o.plotSize + o.pathSize
+    val pathOffset = (if (o.pathSize % 2 == 0) o.pathSize + 2 else o.pathSize + 1) / 2
+    val makePathMain = o.pathSize > 2
+    val makePathAlt = o.pathSize > 4
+
+    private inline fun <T> generate(chunkX: Int,
+                                    chunkZ: Int,
+                                    floor: T, wall:
+                                    T, pathMain: T,
+                                    pathAlt: T,
+                                    fill: T,
+                                    setter: (Int, Int, Int, T) -> Unit) {
+
         val floorHeight = o.floorHeight
         val plotSize = o.plotSize
-        val makePathMain = o.makePathMain
-        val makePathAlt = o.makePathAlt
+        val sectionSize = sectionSize
+        val pathOffset = pathOffset
+        val makePathMain = makePathMain
+        val makePathAlt = makePathAlt
 
         // plot bottom x and z
         // umod is unsigned %: the result is always >= 0
@@ -105,12 +115,12 @@ class DefaultPlotGenerator(name: String, private val o: DefaultGeneratorOptions)
                 curHeight = floorHeight
 
                 val type = when {
-                    (0 <= x && x < plotSize && 0 <= z && z <= plotSize) -> floor
-                    (-1 <= x && x <= plotSize && -1 <= z && z <= plotSize) -> {
+                    (x in 0 until plotSize && z in 0 until plotSize) -> floor
+                    (x in -1..plotSize && z in -1..plotSize) -> {
                         curHeight++
                         wall
                     }
-                    (makePathAlt && -2 <= x && x <= plotSize + 1 && -2 <= z && z <= plotSize + 1) -> pathAlt
+                    (makePathAlt && x in -2 until plotSize + 2 && z in -2 until plotSize + 2) -> pathAlt
                     (makePathMain) -> pathMain
                     else -> {
                         curHeight++
@@ -119,17 +129,17 @@ class DefaultPlotGenerator(name: String, private val o: DefaultGeneratorOptions)
                 }
 
                 for (y in 0 until curHeight) {
-                    setter(x, y, z, fill)
+                    setter(cx, y, cz, fill)
                 }
-                setter(x, curHeight, z, type)
+                setter(cx, curHeight, cz, type)
             }
         }
     }
 
     override fun generateChunkData(world: World?, random: Random?, chunkX: Int, chunkZ: Int, biome: BiomeGrid?): ChunkData {
         val out = Bukkit.createChunkData(world)
-        generate(chunkX, chunkZ, o.floorType.id, o.wallType.id, o.pathMainType.id, o.pathAltType.id, o.fillType.id) { x, y, z, type ->
-            out.setBlock(x, y, z, type.toInt(), 0.toByte())
+        generate(chunkX, chunkZ, o.floorType, o.wallType, o.pathMainType, o.pathAltType, o.fillType) { x, y, z, type ->
+            out.setBlock(x, y, z, type.intId, type.data)
         }
         return out
     }
@@ -146,10 +156,10 @@ class DefaultPlotGenerator(name: String, private val o: DefaultGeneratorOptions)
     }
 
     override fun plotAt(x: Int, z: Int): Plot? {
-        val sectionSize = o.sectionSize
+        val sectionSize = sectionSize
         val plotSize = o.plotSize
-        val absX = x - o.offsetX - o.pathOffset
-        val absZ = z - o.offsetZ - o.pathOffset
+        val absX = x - o.offsetX - pathOffset
+        val absZ = z - o.offsetZ - pathOffset
         val modX = absX umod sectionSize
         val modZ = absZ umod sectionSize
         if (0 <= modX && modX < plotSize && 0 <= modZ && modZ < plotSize) {
@@ -158,8 +168,8 @@ class DefaultPlotGenerator(name: String, private val o: DefaultGeneratorOptions)
         return null
     }
 
-    override fun getBottomCoord(plot: Plot): Vec2i = Vec2i(o.sectionSize * plot.coord.x + o.pathOffset + o.offsetX,
-            o.sectionSize * plot.coord.z + o.pathOffset + o.offsetZ)
+    override fun getBottomCoord(plot: Plot): Vec2i = Vec2i(sectionSize * plot.coord.x + pathOffset + o.offsetX,
+            sectionSize * plot.coord.z + pathOffset + o.offsetZ)
 
     override fun getHomeLocation(plot: Plot): Location {
         val bottom = getBottomCoord(plot)
