@@ -106,6 +106,7 @@ val registerListeners: Registrator.() -> Unit = {
             cancel()
         }
     }
+
     registerListener<BlockBreakEvent> h@ {
         val user = player
         val world = getWorld(user.world) ?: return@h
@@ -121,6 +122,7 @@ val registerListeners: Registrator.() -> Unit = {
             }
         }
     }
+
     registerListener<BlockPlaceEvent> h@ {
         val user = player
         val world = getWorld(user.world) ?: return@h
@@ -128,8 +130,11 @@ val registerListeners: Registrator.() -> Unit = {
             cancel()
         }
     }
+
     registerListener<BlockPistonExtendEvent> { checkPistonAction(this, blocks) }
+
     registerListener<BlockPistonRetractEvent> { checkPistonAction(this, blocks) }
+
     registerListener<ExplosionPrimeEvent> h@ {
         val loc = entity.location
         val world = getWorld(loc.world) ?: return@h
@@ -140,6 +145,7 @@ val registerListeners: Registrator.() -> Unit = {
             radius = 0F
         }
     }
+
     registerListener<EntityExplodeEvent> h@ {
         val loc = entity.location
         val world = getWorld(loc.world) ?: return@h
@@ -147,12 +153,14 @@ val registerListeners: Registrator.() -> Unit = {
             cancel()
         }
     }
+
     registerListener<BlockFromToEvent> {
         val plot = getPlotAt(toBlock)
         if (plot === null || plot.hasBlockVisitors()) {
             cancel()
         }
     }
+
     registerListener<PlayerInteractEvent> h@ {
         val user = player
         val world = getWorld(user.world) ?: return@h
@@ -231,7 +239,14 @@ val registerListeners: Registrator.() -> Unit = {
                 }
             }
             Action.PHYSICAL -> {
-                if (!hasAdminPerm && clickedPlot != null && !clickedPlot.allowsInteractInputs && !clickedPlot.canBuild(user)) {
+                if (hasAdminPerm) return@h
+
+                //@formatter:off
+                if (clickedPlot == null
+                        || ((!clickedPlot.allowsInteractInputs
+                                || clicked.type !in arrayOf(Material.STONE_PLATE, Material.WOOD_PLATE, Material.GOLD_PLATE, Material.IRON_PLATE))
+                        && !clickedPlot.canBuild(user))) {
+                    //@formatter:on
                     cancel()
                 }
             }
